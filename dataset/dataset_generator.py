@@ -44,7 +44,9 @@ def bin_packing_problem_generator():
         items.append(items2)
     
     for item in items:
-        np.random.shuffle(item['rotation'])
+        shuffle_ix = np.random.permutation(np.arange(len(item['rotation'])))
+        item['rotation'] = item['rotation'][shuffle_ix]
+        item['shape'] = item['shape'][shuffle_ix]
 
     return items
 
