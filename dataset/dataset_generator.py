@@ -1,8 +1,7 @@
-import random
 import numpy as np
 import copy
 
-np.random.seed(5201314)
+# np.random.seed(5201314)
 
 def bin_packing_problem_generator():
     # container_size=100*100*100
@@ -50,7 +49,8 @@ def bin_packing_problem_generator():
 
     return items
 
-# 生成装箱问题实例
-items_list = bin_packing_problem_generator()
-for item in items_list:
-    print(item)
+
+if __name__ == "__main__":
+    items_list = bin_packing_problem_generator()
+    for item in items_list:
+        print(item)
