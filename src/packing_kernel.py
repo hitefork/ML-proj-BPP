@@ -35,6 +35,41 @@ from utils import (
 )
 
 
+
+def get_rotation_array(index):
+    if index == 0:
+        return np.array([0, 1, 2])
+    elif index == 1:
+        return np.array([0, 2, 1])
+    elif index == 2:
+        return np.array([1, 0, 2])
+    elif index == 3:
+        return np.array([1, 2, 0])
+    elif index == 4:
+        return np.array([2, 0, 1])
+    elif index == 5:
+        return np.array([2, 1, 0])
+    else:
+        return None
+def get_rotation_index(rotation):
+    if np.array_equal(rotation, np.array([0, 1, 2])):
+        return 0
+    elif np.array_equal(rotation, np.array([0, 2, 1])):
+        return 1
+    elif np.array_equal(rotation, np.array([1, 0, 2])):
+        return 2
+    elif np.array_equal(rotation, np.array([1, 2, 0])):
+        return 3
+    elif np.array_equal(rotation, np.array([2, 0, 1])):
+        return 4
+    elif np.array_equal(rotation, np.array([2, 1, 0])):
+        return 5
+    else:
+        return None
+
+
+
+
 class Box:
     """A class to represent a 3D box
 
@@ -48,7 +83,7 @@ class Box:
            Lengths of the edges of the box
     """
 
-    def __init__(self, size, position, id_: int) -> None:
+    def __init__(self, size: List[int], position: List[int], id_: int) -> None:
         """Initializes a box object
 
         Parameters
@@ -77,8 +112,8 @@ class Box:
         ), "Position is not valid"
 
         self.id_ = id_
-        self.position = position
-        self.size = size
+        self.position = np.asarray(position)
+        self.size = np.asarray(size)
 
     def rotate(self, rotation: int) -> None:
         """Rotates the box in place
@@ -228,8 +263,8 @@ class Container:
 
     def __init__(
         self,
-        size,
-        position,
+        size: NDArray[Shape["1,3"], Int],
+        position:  NDArray[Shape["1,3"], Int] = None,
         id_: int = 0,
     ) -> None:
         """Initializes a 3D container
@@ -297,7 +332,7 @@ class Container:
         return deepcopy(self.height_map)
 
     def check_valid_box_placement(
-        self, box: Box, new_pos: NDArray, check_area: int = 100
+        self, box: Box, new_pos: NDArray, rotation:int=0,check_area: int = 100,
     ) -> int:
         """
         Parameters
@@ -314,7 +349,10 @@ class Container:
         int
         """
         assert len(new_pos) == 2
-
+        temp_size=deepcopy(box.size)
+        box.size= np.asarray(box.size)[get_rotation_array(rotation)].tolist()
+        # print(box.size)
+        # print(np.asarray(box.size)[get_rotation_array(rotation)])
         # Generate the vertices of the bottom face of the box
         v = generate_vertices(np.asarray(box.size), np.asarray([*new_pos, 1]))
         # bottom vertices of the box
@@ -388,7 +426,9 @@ class Container:
 
         if not cuboid_fits(container_min_max, dummy_box_min_max):
             return 0
-
+        
+        box.size=deepcopy(temp_size)
+        
         # Check that the box does not overlap with other boxes in the container
         for other_box in self.boxes:
             if other_box.id_ == dummy_box.id_:
@@ -410,7 +450,7 @@ class Container:
 
     def action_mask(
         self, box: Box, check_area: int = 100
-    ) -> NDArray[Shape["*, *"], Int]:
+    ):
         """Returns an array with all possible positions for a box in the container
         array[i,j] = 1 if the box can be placed in position (i,j), 0 otherwise
 
@@ -426,20 +466,21 @@ class Container:
            np.array(np.int8)
         """
 
-        action_mask = np.zeros(shape=[self.size[0], self.size[1]], dtype=np.int8)
+        action_mask = np.zeros(shape=[self.size[0], self.size[1],6], dtype=np.int8)
         # Generate all possible positions for the box in the container
-        for i in range(0, self.size[0]):
-            for j in range(0, self.size[1]):
-                if (
-                    self.check_valid_box_placement(
-                        box, np.array([i, j], dtype=np.int32), check_area
-                    )
-                    == 1
-                ):
-                    action_mask[i, j] = 1
+        for k in range(0,6):
+            for i in range(0, self.size[0]):
+                for j in range(0, self.size[1]):
+                    if (
+                        self.check_valid_box_placement(
+                            box, np.array([i, j], dtype=np.int32), k, check_area
+                        )
+                        == 1
+                    ):
+                        action_mask[i,j,k] = 1
         return action_mask
 
-    def place_box(self, box: Box, new_position: List[int], check_area=100) -> None:
+    def place_box(self, box: Box, new_position: List[int], rotation=0,check_area=100) -> None:
         """Places a box in the container
         Parameters
         ----------
@@ -450,9 +491,11 @@ class Container:
         check_area:
 
         """
+
         assert (
-            self.check_valid_box_placement(box, new_position, check_area) == 1
+            self.check_valid_box_placement(box, new_position,rotation, check_area) == 1
         ), "Invalid position for box"
+        box.size= np.asarray(box.size)[get_rotation_array(rotation)]
         # Check height_map to find the height at which the box will be placed
         height = self.height_map[new_position[0], new_position[1]]
         # Update the box position
@@ -611,7 +654,7 @@ if __name__ == "__main__":
         Box(size, position=[-1, -1, -1], id_=i) for i, size in enumerate(boxes_sizes)
     ]
     # We pack the boxes in a bigger container since the heuristic rule is not optimal
-    container = Container(np.array([120, 120, 120], dtype=np.int32),np.array([0, 0, 0], dtype=np.int32))
+    container = Container(np.array([120, 120, 120], dtype=np.int32))
     # The parameter 'check_area' gives the percentage of the bottom area of the box that must be supported
     container.first_fit_decreasing(boxes, check_area=100)
     # show plot

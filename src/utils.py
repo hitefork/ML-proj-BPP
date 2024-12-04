@@ -8,37 +8,38 @@ import copy
 import numpy as np
 import math
 from nptyping import NDArray, Int, Shape
-
+from operator import *
 def get_rotation_array(index):
     if index == 0:
-        return np.array([0, 1, 2])
+        return [0, 1, 2]
     elif index == 1:
-        return np.array([0, 2, 1])
+        return [0, 2, 1]
     elif index == 2:
-        return np.array([1, 0, 2])
+        return [1, 0, 2]
     elif index == 3:
-        return np.array([1, 2, 0])
+        return [1, 2, 0]
     elif index == 4:
-        return np.array([2, 0, 1])
+        return [2, 0, 1]
     elif index == 5:
-        return np.array([2, 1, 0])
-    else:
-        return None
+        return [2, 1, 0]
+    
+    
+    
+    
+    
 def get_rotation_index(rotation):
-    if np.array_equal(rotation, np.array([0, 1, 2])):
+    if eq(rotation,[0, 1, 2]):
         return 0
-    elif np.array_equal(rotation, np.array([0, 2, 1])):
+    elif eq(rotation,[0, 2, 1]):
         return 1
-    elif np.array_equal(rotation, np.array([1, 0, 2])):
+    elif eq(rotation,[1, 0, 2]):
         return 2
-    elif np.array_equal(rotation, np.array([1, 2, 0])):
+    elif eq(rotation,[1, 2, 0]):
         return 3
-    elif np.array_equal(rotation, np.array([2, 0, 1])):
+    elif eq(rotation,[2, 0, 1]):
         return 4
-    elif np.array_equal(rotation, np.array([2, 1, 0])):
+    elif eq(rotation,[2, 1, 0]):
         return 5
-    else:
-        return None
 
 
 def boxes_generator(
@@ -61,8 +62,8 @@ def boxes_generator(
     """
 
     item_original = {
-        'shape':    np.array(bin_size),  #[length, height, width]
-        'position': np.array([0, 0, 0]),   #[x, y, z]
+        'shape':    bin_size,  #[length, height, width]
+        'position': [0, 0, 0],   #[x, y, z]
         'rotation':  0,    
     }    
     """
@@ -117,9 +118,9 @@ def boxes_generator(
     
     
     for i,item in enumerate(items):
-        shuffle_ix = np.random.permutation(np.arange(3))
+        shuffle_ix = np.random.permutation(np.arange(3)).tolist()
         item['rotation']= get_rotation_index(shuffle_ix)
-        item['shape'] = item['shape'][shuffle_ix]
+        item['shape'] = np.array(item['shape'])[shuffle_ix].tolist()
         z[i]=item['position'][2]
     
     z_index=z.argsort().tolist()
@@ -276,5 +277,6 @@ def cuboid_fits(cuboid_a: List[int], cuboid_b: List[int]) -> bool:
 
 if __name__ == "__main__":
     items,items_list = boxes_generator([100,100,100])
+    print(items)
     for item in items_list:
         print(item)
