@@ -29,7 +29,7 @@ from gym.spaces import Discrete, MultiDiscrete
 from gym.utils import seeding
 from nptyping import NDArray
 
-from packing_kernel import Box, Container,get_rotation_array,get_rotation_index
+from src.packing_kernel import Box, Container,get_rotation_array,get_rotation_index
 from utils import boxes_generator
 
 class PackingEnv(gym.Env):
