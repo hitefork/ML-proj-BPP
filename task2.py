@@ -17,10 +17,14 @@ from make_data import BoxMaker
 from model import StochasticPolicyCNN,StochasticPolicy
 from config import args
 from make_data import get_inverse_rotation
-
+# set seeds
+# torch.manual_seed(args.seed)
+# np.random.seed(args.seed)
 import matplotlib.pyplot as plt
 # configure CUDA availability
-
+from stable_baselines3 import PPO as PPO_SB3
+from stable_baselines3.common.vec_env import DummyVecEnv
+from stable_baselines3.common.env_util import make_vec_env
 
 use_cuda = torch.cuda.is_available()
 
@@ -30,11 +34,10 @@ max_ldc_x  = 1
 max_ldc_y =1
 
 def getFeasibility(ldc,x,y,l,b,h,r):
-    feasible = False
+    feasible = 0
     rotated_shape=get_inverse_rotation(np.array([l,b,h]),r)
-    # print(ldc[x:x+rotated_shape[0],y:y+rotated_shape[1]])
     if len(np.unique(ldc[x:x+rotated_shape[0],y:y+rotated_shape[1]])) == 1 and ldc[x,y]+rotated_shape[2]<=100:
-        feasible=True
+        feasible=1
     return feasible
 
 class ReplayBuffer(object):
@@ -128,7 +131,7 @@ class BehaviouralCloning():
             self.neg_search = -np.arange(1,self.search_range,1)
             self.search_arr = np.append(self.search,self.neg_search)
             if len(buff.storage) >= args.batch_size:
-                state_feed, dim_feed, action_feed,rotation_feed = buff.sample(args.batch_size)
+                state_feed, dim_feed, action_feed,rotation_feed= buff.sample(args.batch_size)
                 state_feed   = torch.FloatTensor(state_feed)/self.ldc_ht
                 dim_feed     = torch.FloatTensor(dim_feed)/self.ldc_ht
 
@@ -172,8 +175,14 @@ class BehaviouralCloning():
                             }, args.save_path+self.name+"/"+str(episodes)+".pt")
         self.writer.close()
         
-    def getStabilityScore(self,i, j , ldc, dimn,currldc_x=0, currldc_y=0,current_r=0):
+
+
+    def getStabilityScore(self,i, j , ldc, dimn, currldc_x=0, currldc_y=0,current_r=0):
     #     level = ldc[i,j]
+        ldc=ldc.T
+        temp=i
+        i=j
+        j=temp
         rotated_shape=get_inverse_rotation(np.array(dimn),current_r)
         h = rotated_shape[2]
         feasible = False
@@ -418,48 +427,48 @@ class BehaviouralCloning():
         state = np.zeros((4,self.ldc_len,self.ldc_wid))
         walle_vol = 0
         walle_score=0
-        packman_num=0
+        packman_vol=0
         self.search_space=[]
         for i in range(len(dims)):
             packman = 0
             cur_dim = np.array(dims[i][:3]).astype(np.uint16)
-
-
-            
-            feed_state = torch.FloatTensor(state)/self.ldc_ht  #4，100，100
-            feed_state = feed_state.unsqueeze(0)  #1，4，100，100
-
-            feed_dim = torch.FloatTensor(dims[i])/self.ldc_ht #12
-            feed_dim = feed_dim.unsqueeze(0) #1，12
-            
-            if use_cuda:
-                feed_state   = feed_state.to(device)
-                feed_dim     = feed_dim.to(device)
-
-            cur_dim = np.array(dims[i][:3]).astype(np.uint16)
-            a,m,s,r,_   = self.policy.sample(feed_state.float(),feed_dim.float())
-            x,y,temp_rotation     = self.shift_action(a,r)
             l,b,h = cur_dim
+            x,y,score,r = self.get_pos(state,dims[i])
         #     print(score)
-            temp_rotation=int(temp_rotation[0])
-            x = int(x.cpu()[0])
-            y = int(y.cpu()[0])
-            
-            
 
-
-            
-            # print(cur_dim)
-            # print(x,y,temp_rotation)
-            feasible = getFeasibility(state[0],x,y,l,b,h,temp_rotation)
-            
-            if feasible:
-                state = self.step(state,[x,y],cur_dim,temp_rotation)
+            if score!= -10:
+                state = self.step(state,[x,y],cur_dim,r)
+                self.search_space.append([x,y,r])
+                self.search_space.append([x+l,y,r])
+                self.search_space.append([x,y+b,r])
                 tot_vol += cur_dim[0]*cur_dim[1]*cur_dim[2]
-                packman_num+=1
+                packman_vol+=cur_dim[0]*cur_dim[1]*cur_dim[2]
+                packman = 1
+            if score == -10:
+        #         dims.append(dims[i])
+                max_score = -10
+                x_pos = 0
+                y_pos = 0
+                r_pos = 0
 
-
-        print(tot_vol/(self.ldc_ht*self.ldc_len*self.ldc_wid)*100,packman_num)
+                for x_w,y_w,r_w in self.search_space:
+                    walle_score = self.getStabilityScore(x_w,y_w , state[0,:,:], dimn = cur_dim, currldc_x=0, currldc_y=0,current_r=r_w)
+                    if walle_score > max_score:
+                        max_score = walle_score
+                        x_pos = x_w
+                        y_pos = y_w
+                        r_pos = r_w
+                if walle_score != -10:
+                    x = x_pos 
+                    y = y_pos
+                    r= r_pos
+                    state = self.step(state,[x,y],cur_dim,r)
+                    self.search_space.append([x,y,r])
+                    self.search_space.append([x+l,y,r])
+                    self.search_space.append([x,y+b,r])
+                    tot_vol += cur_dim[0]*cur_dim[1]*cur_dim[2]
+                    walle_vol+=cur_dim[0]*cur_dim[1]*cur_dim[2]
+        print(tot_vol/(self.ldc_ht*self.ldc_len*self.ldc_wid)*100,packman_vol/(self.ldc_ht*self.ldc_len*self.ldc_wid)*100,walle_vol/(self.ldc_ht*self.ldc_len*self.ldc_wid)*100)
         self.show(state[0,:,:])
 
     def show(self,a):
@@ -469,10 +478,8 @@ class BehaviouralCloning():
 if __name__ == "__main__":
     if not os.path.exists('./Models'):
         os.makedirs('./Models')
-    # set seeds
-    # torch.manual_seed(args.seed)
-    # np.random.seed(args.seed)
-    BC = BehaviouralCloning(args,name="StochasticPolicyCNN_lr1e-2_random_task1")
-    BC.train()
+
+    BC = BehaviouralCloning(args,name="StochasticPolicyCNN_lr1e-2_random")
+    BC.evaluate()
 
         
