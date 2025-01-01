@@ -14,7 +14,7 @@ from torch.distributions import Normal
 from tensorboardX import SummaryWriter
 import os
 from make_data import BoxMaker
-from model import StochasticPolicyCNN,StochasticPolicy,QNetwork
+from model import StochasticPolicyCNN,StochasticPolicy,QNetwork,StochasticPolicyCNN_task3,QNetwork_CNN
 from config import args
 from make_data import get_inverse_rotation
 # set seeds
@@ -64,7 +64,8 @@ class ReplayBuffer(object):
             u.append(np.array(U, copy=False))
             r.append(R)      
             reward.append(Reward)  
-            
+
+
         return np.array(x), np.array(y), np.array(u),np.array(r),np.array(reward)
     
 class BehaviouralCloning():
@@ -75,7 +76,7 @@ class BehaviouralCloning():
         self.num_actions = 3
         self.input_size = self.ldc_len*self.ldc_wid
         self.data_maker = BoxMaker(self.ldc_ht,self.ldc_wid,self.ldc_len)
-        self.policy = StochasticPolicyCNN().to(device)
+        self.policy = StochasticPolicyCNN_task3().to(device)
         self.search_range=search_range # will search in +-search_range
         self.search = np.arange(0,search_range,1)
         self.neg_search = -np.arange(1,search_range,1)
@@ -85,7 +86,7 @@ class BehaviouralCloning():
             print('Init tensorboardX')
             self.writer = SummaryWriter(log_dir='runs/{}'.format(datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")))
         # 初始化Q网络
-        self.q_network = QNetwork(self.input_size,num_actions=3).to(device)
+        self.q_network = QNetwork_CNN(num_actions=3).to(device)
 
 
     def shift_action(self,action,rotation):
@@ -116,6 +117,9 @@ class BehaviouralCloning():
             self.policy.train()
 
         for episodes in tqdm(range(args.episodes)):
+            # self.ldc_len=np.random.randint(30,100)
+            # self.ldc_len=np.random.randint(30,100)
+            # self.ldc_len=np.random.randint(30,100)
             self.data_maker=BoxMaker(self.ldc_ht,self.ldc_wid,self.ldc_len)
             data = self.data_maker.get_data_dict(train=False,flatten=False)
             data = np.array(data)
@@ -128,6 +132,7 @@ class BehaviouralCloning():
                 dim[:3] = data[i][1].astype(int)
                 action = data[i][2][:2]
                 rotation=data[i][3]
+                
 
                 score=self.getStabilityScore(action[0],action[1] , state[0], dimn = dim[:3], currldc_x=0, currldc_y=0,current_r=rotation)
                 buff.add([state,dim,action,rotation,score])
@@ -152,7 +157,7 @@ class BehaviouralCloning():
 
                 a,m,s,r   = self.policy.sample(state_feed.float(),dim_feed.float())
                 x,y,temp_rotation     = self.shift_action(a,r)
-                state_feed=state_feed[:,0,:,:].flatten(1)
+                state_feed=state_feed[:,0,:,:]
                 dim_feed=dim_feed[:,:3]
                 rotation_feed=rotation_feed.unsqueeze(1)
 
@@ -173,7 +178,7 @@ class BehaviouralCloning():
                     self.writer.add_scalar('Loss',total_loss.item(),episodes+start_episode)
                 optimizer.step()
 
-            if episodes % 5000 == 0 and episodes !=0:
+            if episodes % 50000 == 0 and episodes !=0:
                 # print('Saving model...')
                 if not os.path.exists(args.save_path+self.name): #判断所在目录下是否有该文件名的文件夹
                     os.mkdir(args.save_path+self.name) #创建多级目录用mkdirs，单击目录mkdir
@@ -524,8 +529,9 @@ class BehaviouralCloning():
 if __name__ == "__main__":
     if not os.path.exists('./Models'):
         os.makedirs('./Models')
-
-    BC = BehaviouralCloning(args,name="StochasticPolicyCNN_lr1e-3_random_reward_resume")
-    BC.train()
+    temp=[(100,100,100),(35, 23, 13), (37, 26, 13), (38, 26, 13), (40, 28, 16),(42, 30, 18), (42, 30, 40), (52, 40, 17), (54, 45, 36)]
+    for i,j,k in temp:
+        BC = BehaviouralCloning(args,name="StochasticPolicyCNN_task3",ldc_len=i,ldc_wid=j,ldc_ht=k)
+        BC.train()
 
         
