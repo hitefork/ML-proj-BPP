@@ -117,7 +117,7 @@ class BehaviouralCloning():
 
         for episodes in tqdm(range(args.episodes)):
             self.data_maker=BoxMaker(self.ldc_ht,self.ldc_wid,self.ldc_len)
-            data = self.data_maker.get_data_dict(flatten=False)
+            data = self.data_maker.get_data_dict(train=False,flatten=False)
             data = np.array(data)
             state = np.zeros((4,self.ldc_len,self.ldc_wid))
             dim   = np.zeros((12)).astype(int)
@@ -201,11 +201,12 @@ class BehaviouralCloning():
             (i >= self.ldc_wid*currldc_y) and (i+rotated_shape[1] <= self.ldc_wid*(currldc_y+1)):
             level = ldc[i,j]
             if level + h <= self.ldc_ht: 
-                feasible = True
+
                 # --------------------------------------------------- Flat position
                 if len(np.unique(ldc[i:i+rotated_shape[1], j:j+rotated_shape[0]])) == 1:
                     stab_score = 1
                     found_flat = 1
+                    feasible = True
                 # ---------------------------------------------------- Non-Flat position
                 if not found_flat:
                     corners =  [ldc[i,j], ldc[i+rotated_shape[1]-1,j], ldc[i,j+rotated_shape[0]-1], ldc[i+rotated_shape[1]-1, j+rotated_shape[0]-1]]
@@ -438,9 +439,15 @@ class BehaviouralCloning():
         walle_vol = 0
         walle_score=0
         packman_vol=0
+        random_vol=0
         self.search_space=[]
+        dim   = np.zeros((12))
+        print(len(dims))
+        count=0
+        unpack_dims=[]
+        
         for i in range(len(dims)):
-            packman = 0
+
             cur_dim = np.array(dims[i][:3]).astype(np.uint16)
             l,b,h = cur_dim
             x,y,score,r = self.get_pos(state,dims[i])
@@ -448,12 +455,15 @@ class BehaviouralCloning():
 
             if score!= -10:
                 state = self.step(state,[x,y],cur_dim,r)
-                self.search_space.append([x,y,r])
-                self.search_space.append([x+l,y,r])
-                self.search_space.append([x,y+b,r])
+                for k in range(6):
+                    self.search_space.append([x,y,k])
+                    self.search_space.append([x+get_inverse_rotation(cur_dim,r)[0],y,k])
+                    self.search_space.append([x,y+get_inverse_rotation(cur_dim,r)[1],k])
+                    self.search_space.append([x+get_inverse_rotation(cur_dim,r)[0],y+get_inverse_rotation(cur_dim,r)[1],k])
                 tot_vol += cur_dim[0]*cur_dim[1]*cur_dim[2]
                 packman_vol+=cur_dim[0]*cur_dim[1]*cur_dim[2]
-                packman = 1
+                count+=1
+
             if score == -10:
         #         dims.append(dims[i])
                 max_score = -10
@@ -473,11 +483,37 @@ class BehaviouralCloning():
                     y = y_pos
                     r= r_pos
                     state = self.step(state,[x,y],cur_dim,r)
-                    self.search_space.append([x,y,r])
-                    self.search_space.append([x+l,y,r])
-                    self.search_space.append([x,y+b,r])
+                    for k in range(6):
+                        self.search_space.append([x,y,k])
+                        self.search_space.append([x+get_inverse_rotation(cur_dim,r)[0],y,k])
+                        self.search_space.append([x,y+get_inverse_rotation(cur_dim,r)[1],k])
+                        self.search_space.append([x+get_inverse_rotation(cur_dim,r)[0],y+get_inverse_rotation(cur_dim,r)[1],k])
                     tot_vol += cur_dim[0]*cur_dim[1]*cur_dim[2]
                     walle_vol+=cur_dim[0]*cur_dim[1]*cur_dim[2]
+                    count+=1
+                else:
+                    temp_flag=False
+
+                    for q in range(self.ldc_len):
+                        for w in range(self.ldc_wid):
+                            for e in range(6):
+                                if(temp_flag==True):
+                                    continue
+                                random_score = self.getStabilityScore(q,w , state[0,:,:], dimn = cur_dim, currldc_x=0, currldc_y=0,current_r=e)
+                                if random_score!= -10:
+                                    state = self.step(state,[q,w],cur_dim,e)
+                                    for k in range(6):
+                                        self.search_space.append([q,w,k])
+                                        self.search_space.append([q+get_inverse_rotation(cur_dim,e)[0],y,k])
+                                        self.search_space.append([q,w+get_inverse_rotation(cur_dim,e)[1],k])
+                                        self.search_space.append([q+get_inverse_rotation(cur_dim,e)[0],w+get_inverse_rotation(cur_dim,r)[1],k])
+                                    tot_vol += cur_dim[0]*cur_dim[1]*cur_dim[2]
+                                    random_vol+=cur_dim[0]*cur_dim[1]*cur_dim[2]
+                                    count+=1
+                                    temp_flag=True
+                   
+        print(state[0,:20,:20].flatten())
+        print(count)
         print(tot_vol/(self.ldc_ht*self.ldc_len*self.ldc_wid)*100,packman_vol/(self.ldc_ht*self.ldc_len*self.ldc_wid)*100,walle_vol/(self.ldc_ht*self.ldc_len*self.ldc_wid)*100)
         self.show(state[0,:,:])
 
@@ -489,7 +525,7 @@ if __name__ == "__main__":
     if not os.path.exists('./Models'):
         os.makedirs('./Models')
 
-    BC = BehaviouralCloning(args,name="StochasticPolicyCNN_lr1e-3_random_reward")
+    BC = BehaviouralCloning(args,name="StochasticPolicyCNN_lr1e-3_random_reward_resume")
     BC.train()
 
         
