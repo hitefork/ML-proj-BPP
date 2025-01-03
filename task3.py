@@ -5,6 +5,7 @@ import os
 import datetime
 import numpy as np
 import pandas as pd
+import csv
 from tqdm import tqdm
 import torch
 import torch.nn as nn
@@ -21,10 +22,7 @@ from make_data import get_inverse_rotation
 # torch.manual_seed(args.seed)
 # np.random.seed(args.seed)
 import matplotlib.pyplot as plt
-# configure CUDA availability
-from stable_baselines3 import PPO as PPO_SB3
-from stable_baselines3.common.vec_env import DummyVecEnv
-from stable_baselines3.common.env_util import make_vec_env
+
 
 use_cuda = torch.cuda.is_available()
 
@@ -33,6 +31,23 @@ device   = torch.device("cuda:7" if use_cuda else "cpu")
 max_ldc_x  = 1
 max_ldc_y =1
 
+
+def find_max_numbered_file(folder_path):
+    max_number = float('-inf')
+    max_file = None
+
+    for filename in os.listdir(folder_path):
+        file_path = os.path.join(folder_path, filename)
+        if os.path.isfile(file_path):
+            try:
+                num = int(''.join(c for c in filename if c.isdigit()))
+                if num > max_number:
+                    max_number = num
+                    max_file = file_path
+            except ValueError:
+                continue
+
+    return max_file
 def getFeasibility(ldc,x,y,l,b,h,r):
     feasible = 0
     rotated_shape=get_inverse_rotation(np.array([l,b,h]),r)
@@ -69,7 +84,7 @@ class ReplayBuffer(object):
         return np.array(x), np.array(y), np.array(u),np.array(r),np.array(reward)
     
 class BehaviouralCloning():
-    def __init__(self,args,ldc_len=100,ldc_wid=100,ldc_ht=100,search_range=6,name="StochasticPolicyCNN_train"):
+    def __init__(self,args,ldc_len=100,ldc_wid=100,ldc_ht=100,gamma=0.99,search_range=6,name="StochasticPolicyCNN_train"):
         self.ldc_len = ldc_len
         self.ldc_wid = ldc_wid
         self.ldc_ht  = ldc_ht
@@ -82,6 +97,7 @@ class BehaviouralCloning():
         self.neg_search = -np.arange(1,search_range,1)
         self.search_arr = np.append(self.search,self.neg_search)
         self.name=name
+        self.gamma = gamma
         if args.tensorboard:
             print('Init tensorboardX')
             self.writer = SummaryWriter(log_dir='runs/{}'.format(datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")))
@@ -105,11 +121,14 @@ class BehaviouralCloning():
         buff = ReplayBuffer(1e4)
 
         if args.load_path!=None:
+            folder = '/hdd/junxuanl/ML-proj-BPP/Models/StochasticPolicyCNN_task3'  # 这里替换成你实际想要查找的文件夹路径
+            result = find_max_numbered_file(folder)
             if not use_cuda:
-                checkpoint = torch.load(args.load_path,map_location='cpu')
+                checkpoint = torch.load(result,map_location='cpu')
             else:
-                checkpoint = torch.load(args.load_path)
-                print("load: "+args.load_path)
+                checkpoint = torch.load(result)
+                print("load: "+result)
+    
             self.policy.load_state_dict(checkpoint['model_state_dict'])
             optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             start_episode = checkpoint['episode']
@@ -190,6 +209,153 @@ class BehaviouralCloning():
                             }, args.save_path+self.name+"/"+str(episodes)+".pt")
         self.writer.close()
         
+        
+        
+    def train_online(self):
+        optimizer = optim.Adam(self.policy.parameters(),
+                                     lr=args.lr)
+        start_episode = 0
+
+
+        if args.load_path!=None:
+            folder = '/hdd/junxuanl/ML-proj-BPP/Models/StochasticPolicyCNN_task3_online_modified'  # 这里替换成你实际想要查找的文件夹路径
+            result = find_max_numbered_file(folder)
+            if not use_cuda:
+                checkpoint = torch.load(result,map_location='cpu')
+            else:
+                checkpoint = torch.load(result)
+                print("load: "+result)
+    
+            self.policy.load_state_dict(checkpoint['model_state_dict'])
+            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            start_episode = checkpoint['episode']
+            loss = checkpoint['loss']
+            self.policy.train()
+
+
+        for episodes in tqdm(range(1000)):
+            # self.ldc_len=np.random.randint(30,100)
+            # self.ldc_len=np.random.randint(30,100)
+            # self.ldc_len=np.random.randint(30,100)
+            self.data_maker=BoxMaker(self.ldc_ht,self.ldc_wid,self.ldc_len)
+            data = self.data_maker.get_data_dict(train=False,flatten=False)
+            data = np.array(data)
+            state = np.zeros((4,self.ldc_len,self.ldc_wid))
+            dim   = np.zeros((12)).astype(int)
+            total_score=[]
+            total_volume=0
+            dims=[]
+            self.search = np.arange(0,self.search_range,1)
+            self.neg_search = -np.arange(1,self.search_range,1)
+            self.search_arr = np.append(self.search,self.neg_search)
+            action_log_probs=[]
+            rotation_log_probs=[]
+            for i in range(len(data)):
+
+                dims.append(data[i][1].astype(int))
+
+            self.search_space=[]
+
+            for i in range(len(dims)):
+                dim = np.roll(dim,shift=3)
+                dim[:3] = dims[i]
+                       
+
+                temp_state=torch.from_numpy(state).unsqueeze(0).float()
+                temp_dim=torch.from_numpy(dim).unsqueeze(0).float()
+                if use_cuda:
+                    temp_state=temp_state.to(device)
+                    temp_dim=temp_dim.to(device)
+
+                a,action_log_prob,s,r,rotation_log_prob   = self.policy.sample(temp_state,temp_dim)
+                action_log_probs.append(action_log_prob)
+                rotation_log_probs.append(rotation_log_prob)
+                x,y,temp_rotation     = self.shift_action(a,r)
+                temp_rotation=int(temp_rotation[0])
+                x = int(x.cpu()[0])
+                y = int(y.cpu()[0])
+                score = self.getStabilityScore(x,y , state[0,:,:], dimn = dim[:3], currldc_x=0, currldc_y=0,current_r=temp_rotation)
+                walle_score=-10
+                if score!= -10:
+                    state = self.step(state,[x,y],dim[:3],temp_rotation)
+                    for k in range(6):
+                        self.search_space.append([x,y,k])
+                        self.search_space.append([x+get_inverse_rotation(dim[:3],temp_rotation)[0],y,k])
+                        self.search_space.append([x,y+get_inverse_rotation(dim[:3],temp_rotation)[1],k])
+                        self.search_space.append([x+get_inverse_rotation(dim[:3],temp_rotation)[0],y+get_inverse_rotation(dim[:3],temp_rotation)[1],k])
+                        total_volume+=dim[:3][0]*dim[:3][1]*dim[:3][2]
+
+                if score == -10:
+            #         dims.append(dims[i])
+                    max_score = -10
+                    x_pos = 0
+                    y_pos = 0
+                    r_pos = 0
+
+                    for x_w,y_w,r_w in self.search_space:
+                        walle_score = self.getStabilityScore(x_w,y_w , state[0,:,:], dimn = dim[:3], currldc_x=0, currldc_y=0,current_r=r_w)
+                        if walle_score > max_score:
+                            max_score = walle_score
+                            x_pos = x_w
+                            y_pos = y_w
+                            r_pos = r_w
+                    if walle_score != -10:
+                        x = x_pos 
+                        y = y_pos
+                        r= r_pos
+                        state = self.step(state,[x,y],dim[:3],temp_rotation)
+                        for k in range(6):
+                            self.search_space.append([x,y,k])
+                            self.search_space.append([x+get_inverse_rotation(dim[:3],temp_rotation)[0],y,k])
+                            self.search_space.append([x,y+get_inverse_rotation(dim[:3],temp_rotation)[1],k])
+                            self.search_space.append([x+get_inverse_rotation(dim[:3],temp_rotation)[0],y+get_inverse_rotation(dim[:3],temp_rotation)[1],k])
+                        score=walle_score-5
+                        total_volume+=dim[:3][0]*dim[:3][1]*dim[:3][2]
+                    else:
+                        temp_flag=False
+                        for q in range(self.ldc_len):
+                            for w in range(self.ldc_wid):
+                                for e in range(6):
+                                    if(temp_flag==True):
+                                        continue
+                                    random_score = self.getStabilityScore(q,w , state[0,:,:], dimn = dim[:3], currldc_x=0, currldc_y=0,current_r=e)
+                                    if random_score!= -10:
+                                        state = self.step(state,[q,w],dim[:3],e)
+                                        for k in range(6):
+                                            self.search_space.append([q,w,k])
+                                            self.search_space.append([q+get_inverse_rotation(dim[:3],e)[0],y,k])
+                                            self.search_space.append([q,w+get_inverse_rotation(dim[:3],e)[1],k])
+                                            self.search_space.append([q+get_inverse_rotation(dim[:3],e)[0],w+get_inverse_rotation(dim[:3],e)[1],k])
+                                        score=random_score-7
+                                        temp_flag=True
+                                        total_volume+=dim[:3][0]*dim[:3][1]*dim[:3][2]
+                total_score.append(0.3*dim[:3][0]*dim[:3][1]*dim[:3][2]/self.ldc_ht/self.ldc_len/self.ldc_wid+0.4*(np.max(state[0])-np.min(state[0]))/self.ldc_ht+0.5*score)
+        
+            optimizer.zero_grad()                   
+            G=0
+            for i in reversed(range(len(total_score))):  
+                G = self.gamma * G + score
+                loss_action = -action_log_probs[i] * G  # 每一步的损失函数
+                loss_rotation = -rotation_log_probs[i] * G  # 每一步的损失函数
+                loss=loss_rotation+loss_action
+                loss.backward()  # 反向传播计算梯度
+                
+            # print(loss.item())
+            if args.tensorboard:
+                self.writer.add_scalar('Loss',loss.item(),episodes+start_episode)
+            optimizer.step()
+
+            if episodes % 499 == 0 and episodes !=0:
+                # print('Saving model...')
+                if not os.path.exists(args.save_path+self.name): #判断所在目录下是否有该文件名的文件夹
+                    os.mkdir(args.save_path+self.name) #创建多级目录用mkdirs，单击目录mkdir
+                torch.save({
+                            'episode': 10000,
+                            'model_state_dict': self.policy.state_dict(),
+                            'optimizer_state_dict': optimizer.state_dict(),
+                            'loss': loss,
+                            }, args.save_path+self.name+"/"+str(episodes)+".pt")
+        self.writer.close()
 
 
     def getStabilityScore(self,i, j , ldc, dimn, currldc_x=0, currldc_y=0,current_r=0):
@@ -382,7 +548,7 @@ class BehaviouralCloning():
             feed_dim     = feed_dim.to(device)
 
         cur_dim = np.array(dims[:3]).astype(np.uint16)
-        a,m,s,r   = self.policy.sample(feed_state.float(),feed_dim.float())
+        a,m,s,r,_   = self.policy.sample(feed_state.float(),feed_dim.float())
         x,y,temp_rotation     = self.shift_action(a,r)
 
         temp_rotation=int(temp_rotation[0])
@@ -427,10 +593,14 @@ class BehaviouralCloning():
                 checkpoint = torch.load(args.load_path)
                 print("load: "+args.load_path)
             self.policy.load_state_dict(checkpoint['model_state_dict'])
+        
+        checkpoint = torch.load(args.load_path)
+        self.policy.load_state_dict(checkpoint['model_state_dict'])
 
-
+        self.policy.eval()
+        
         dim   = np.zeros((12))
-        data = self.data_maker.get_data_dict(flatten=False)
+        data = self.data_maker.get_data_dict(train=False,flatten=False)
         dims=[]
 
 
@@ -522,16 +692,178 @@ class BehaviouralCloning():
         print(tot_vol/(self.ldc_ht*self.ldc_len*self.ldc_wid)*100,packman_vol/(self.ldc_ht*self.ldc_len*self.ldc_wid)*100,walle_vol/(self.ldc_ht*self.ldc_len*self.ldc_wid)*100)
         self.show(state[0,:,:])
 
+
+    def evaluate_on_data(self,boxes):
+
+
+        if args.load_path!=None:
+            if not use_cuda:
+                checkpoint = torch.load(args.load_path,map_location='cpu')
+            else:
+                checkpoint = torch.load(args.load_path)
+                print("load: "+args.load_path)
+            self.policy.load_state_dict(checkpoint['model_state_dict'])
+        
+        checkpoint = torch.load(args.load_path)
+        self.policy.load_state_dict(checkpoint['model_state_dict'])
+
+        self.policy.eval()
+        
+        dim   = np.zeros((12))
+
+        dims=[]
+
+
+        for i in range(len(boxes)):
+            dim = np.roll(dim,shift=3)
+            dim[:3] = boxes[i]
+            dims.append(dim)
+
+        tot_vol = 0
+        state = np.zeros((4,self.ldc_len,self.ldc_wid))
+        walle_vol = 0
+        walle_score=0
+        packman_vol=0
+        random_vol=0
+        self.search_space=[]
+        dim   = np.zeros((12))
+
+        count=0
+        fail_count=0
+        
+        for i in range(len(dims)):
+            if fail_count>40:
+                break
+            cur_dim = np.array(dims[i][:3]).astype(np.uint16)
+            l,b,h = cur_dim
+            x,y,score,r = self.get_pos(state,dims[i])
+        #     print(score)
+
+            if score!= -10:
+                state = self.step(state,[x,y],cur_dim,r)
+                for k in range(6):
+                    self.search_space.append([x,y,k])
+                    self.search_space.append([x+get_inverse_rotation(cur_dim,r)[0],y,k])
+                    self.search_space.append([x,y+get_inverse_rotation(cur_dim,r)[1],k])
+                    self.search_space.append([x+get_inverse_rotation(cur_dim,r)[0],y+get_inverse_rotation(cur_dim,r)[1],k])
+                tot_vol += cur_dim[0]*cur_dim[1]*cur_dim[2]
+                packman_vol+=cur_dim[0]*cur_dim[1]*cur_dim[2]
+                count+=1
+                boxes.pop(i)
+
+            if score == -10:
+        #         dims.append(dims[i])
+                max_score = -10
+                x_pos = 0
+                y_pos = 0
+                r_pos = 0
+
+                for x_w,y_w,r_w in self.search_space:
+                    walle_score = self.getStabilityScore(x_w,y_w , state[0,:,:], dimn = cur_dim, currldc_x=0, currldc_y=0,current_r=r_w)
+                    if walle_score > max_score:
+                        max_score = walle_score
+                        x_pos = x_w
+                        y_pos = y_w
+                        r_pos = r_w
+                if walle_score != -10:
+                    x = x_pos 
+                    y = y_pos
+                    r= r_pos
+                    state = self.step(state,[x,y],cur_dim,r)
+                    for k in range(6):
+                        self.search_space.append([x,y,k])
+                        self.search_space.append([x+get_inverse_rotation(cur_dim,r)[0],y,k])
+                        self.search_space.append([x,y+get_inverse_rotation(cur_dim,r)[1],k])
+                        self.search_space.append([x+get_inverse_rotation(cur_dim,r)[0],y+get_inverse_rotation(cur_dim,r)[1],k])
+                    tot_vol += cur_dim[0]*cur_dim[1]*cur_dim[2]
+                    walle_vol+=cur_dim[0]*cur_dim[1]*cur_dim[2]
+                    count+=1
+                    boxes.pop(i)
+                else:
+                    temp_flag=False
+
+                    for q in range(self.ldc_len):
+                        for w in range(self.ldc_wid):
+                            for e in range(6):
+                                if(temp_flag==True):
+                                    continue
+                                random_score = self.getStabilityScore(q,w , state[0,:,:], dimn = cur_dim, currldc_x=0, currldc_y=0,current_r=e)
+                                if random_score!= -10:
+                                    state = self.step(state,[q,w],cur_dim,e)
+                                    for k in range(6):
+                                        self.search_space.append([q,w,k])
+                                        self.search_space.append([q+get_inverse_rotation(cur_dim,e)[0],y,k])
+                                        self.search_space.append([q,w+get_inverse_rotation(cur_dim,e)[1],k])
+                                        self.search_space.append([q+get_inverse_rotation(cur_dim,e)[0],w+get_inverse_rotation(cur_dim,r)[1],k])
+                                    tot_vol += cur_dim[0]*cur_dim[1]*cur_dim[2]
+                                    random_vol+=cur_dim[0]*cur_dim[1]*cur_dim[2]
+                                    count+=1
+                                    temp_flag=True
+                                    boxes.pop(i)
+
+                    if temp_flag==False:
+                        fail_count+=1
+        # print(state[0,:20,:20].flatten())
+        # print(count)
+        print(tot_vol/(self.ldc_ht*self.ldc_len*self.ldc_wid)*100,packman_vol/(self.ldc_ht*self.ldc_len*self.ldc_wid)*100,walle_vol/(self.ldc_ht*self.ldc_len*self.ldc_wid)*100)
+        self.show(state[0,:,:])
+
+
+        return boxes,tot_vol/(self.ldc_ht*self.ldc_len*self.ldc_wid)*100
+
+
     def show(self,a):
         plt.imshow(a,cmap='hot',vmin=0,vmax=self.ldc_ht)
-        plt.savefig('Box_data/evaluation.jpg')
+        plt.savefig(f'Box_data/evaluation_{self.ldc_len}*{self.ldc_wid}*{self.ldc_ht}.jpg')
+
+
+def read_csv_file(file_path):
+    data = []
+    with open(file_path, mode='r', encoding='utf-8') as file:
+        reader = csv.DictReader(file)  # 使用DictReader可以将每行数据读取为字典形式
+        for row in reader:
+            data.append(row)
+    return data
 
 if __name__ == "__main__":
     if not os.path.exists('./Models'):
         os.makedirs('./Models')
-    temp=[(100,100,100),(35, 23, 13), (37, 26, 13), (38, 26, 13), (40, 28, 16),(42, 30, 18), (42, 30, 40), (52, 40, 17), (54, 45, 36)]
+    # temp=[(100,100,100),(35, 23, 13), (37, 26, 13), (38, 26, 13), (40, 28, 16),(42, 30, 18), (42, 30, 40), (52, 40, 17), (54, 45, 36)]
+    # for i,j,k in temp:
+    #     BC = BehaviouralCloning(args,name="StochasticPolicyCNN_task3_online",ldc_len=i,ldc_wid=j,ldc_ht=k)
+    #     # BC.train_online()
+    #     BC.evaluate()
+
+    torch.manual_seed(43)
+    np.random.seed(43)
+    file_path = '/hdd/junxuanl/ML-proj-BPP/task3.csv'
+    csv_data = read_csv_file(file_path)
+    boxes=[]
+    for row in csv_data:
+        shape=np.zeros((3))
+        shape[0]=row['长(CM)']
+        shape[1]=row['宽(CM)']
+        shape[2]=row['高(CM)']
+        shape=np.ceil(shape).astype(int)
+        nums=int(row['qty'])
+        for i in range(nums):
+            boxes.append(shape)
+    
+    temp=[(35, 23, 13), (37, 26, 13), (38, 26, 13), (40, 28, 16),(42, 30, 18), (42, 30, 40), (52, 40, 17), (54, 45, 36)]
+    Rate=[]
+    total_nums=len(boxes)
+    total_vol=0
+    vol=0
+
     for i,j,k in temp:
-        BC = BehaviouralCloning(args,name="StochasticPolicyCNN_task3",ldc_len=i,ldc_wid=j,ldc_ht=k)
-        BC.train()
+        BC = BehaviouralCloning(args,name="StochasticPolicyCNN_task3_online_modified",ldc_len=i,ldc_wid=j,ldc_ht=k)
+        # BC.train_online()
+        boxes,rate=BC.evaluate_on_data(boxes)
+        Rate.append(rate)
+        total_vol+=i*j*k
+        vol+=rate/100*i*j*k
+    
+    # print(Rate)
+    print(f"total_packed_vol_rate:{vol/total_vol*100}")
 
         

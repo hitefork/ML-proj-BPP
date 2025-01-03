@@ -1,7 +1,6 @@
 # ML-proj-BPP
-SJTU CS3308 Machine Learning final project, created by Junxuan Liang, Nan Jiang, Yue Yuan.
+SJTU CS3308 Machine Learning final project, created by Junxuan Liang.
 
-This repository contains an environment compatible with OpenAI Gym's API to solve the bin packing problem with reinforcement learning (RL).
 
 
 # Installation
