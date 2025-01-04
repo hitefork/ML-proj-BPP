@@ -530,7 +530,7 @@ class BehaviouralCloning():
     def show(self,a):
         plt.imshow(a,cmap='hot',vmin=0,vmax=self.ldc_ht)
         plt.colorbar()
-        plt.savefig('task1.jpg')
+        plt.savefig('Box_data/task1.jpg')
 
 if __name__ == "__main__":
     if not os.path.exists('./Models'):

@@ -7,8 +7,8 @@ parser.add_argument('--episodes', type=int, default=100,
                     help='number of episodes to train the agent')
 parser.add_argument('--lr', type=float, default=1e-3, metavar='G',
                     help='learning rate (default: 0.0003)')
-parser.add_argument('--seed', type=int, default=10000003, metavar='N',
-                    help='random seed (default: 10000003)')
+parser.add_argument('--seed', type=int, default=1717171717, metavar='N',
+                    help='random seed (default: 1717171717)')
 parser.add_argument('--save_path', type=str, default='./Models/', 
                     help='file path to save the weights')
 parser.add_argument('--load_path', type=str, default=None, 

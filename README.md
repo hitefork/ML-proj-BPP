@@ -16,7 +16,7 @@ pip install -r requirements.txt
 
 Model Weights are as follows:
 
-[https://jbox.sjtu.edu.cn/l/J1K6bQ](https://jbox.sjtu.edu.cn/l/J1K6bQ)
+[https://jbox.sjtu.edu.cn/l/j1iBwp](https://jbox.sjtu.edu.cn/l/j1iBwp)
 
 # Task1
 
