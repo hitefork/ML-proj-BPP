@@ -1,5 +1,5 @@
 # ML-proj-BPP
-SJTU CS3308 Machine Learning final project, created by Junxuan Liang.
+SJTU CS3308 Machine Learning final project, created by Junxuan Liang, Jiang Nan, Yue Yuan.
 
 
 
