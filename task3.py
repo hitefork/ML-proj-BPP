@@ -102,7 +102,7 @@ class BehaviouralCloning():
             print('Init tensorboardX')
             self.writer = SummaryWriter(log_dir='runs/{}'.format(datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")))
         # 初始化Q网络
-        self.q_network = QNetwork_CNN(num_actions=3).to(device)
+        # self.q_network = QNetwork_CNN(num_actions=3).to(device)
 
 
     def shift_action(self,action,rotation):
@@ -121,13 +121,16 @@ class BehaviouralCloning():
         buff = ReplayBuffer(1e4)
 
         if args.load_path!=None:
-            folder = '/hdd/junxuanl/ML-proj-BPP/Models/StochasticPolicyCNN_task3'  # 这里替换成你实际想要查找的文件夹路径
-            result = find_max_numbered_file(folder)
             if not use_cuda:
-                checkpoint = torch.load(result,map_location='cpu')
+                checkpoint = torch.load(args.load_path,map_location='cpu')
             else:
-                checkpoint = torch.load(result)
-                print("load: "+result)
+                checkpoint = torch.load(args.load_path)
+                print("load: "+args.load_path)
+            self.policy.load_state_dict(checkpoint['model_state_dict'])
+            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            start_episode = checkpoint['episode']
+            loss = checkpoint['loss']
+            self.policy.train()
     
             self.policy.load_state_dict(checkpoint['model_state_dict'])
             optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
@@ -180,15 +183,15 @@ class BehaviouralCloning():
                 dim_feed=dim_feed[:,:3]
                 rotation_feed=rotation_feed.unsqueeze(1)
 
-                ward=self.q_network(state_feed.float(),dim_feed.float(),action_feed.float(),rotation_feed.float())
+                # ward=self.q_network(state_feed.float(),dim_feed.float(),action_feed.float(),rotation_feed.float())
                 pred = torch.cat([x.unsqueeze(1),y.unsqueeze(1)],dim=1)
                 rotation_pred=torch.Tensor(temp_rotation)
 
                 optimizer.zero_grad()
                 loss_action = F.mse_loss(pred,action_feed.float())
                 loss_rotation = F.mse_loss(rotation_pred,rotation_feed.float())
-                loss_reward = F.mse_loss(ward.squeeze(1),reward_feed.float())
-                total_loss=loss_action+loss_rotation+loss_reward
+                # loss_reward = F.mse_loss(ward.squeeze(1),reward_feed.float())
+                total_loss=loss_action+loss_rotation
                 total_loss.backward()
                 
                 
@@ -218,13 +221,11 @@ class BehaviouralCloning():
 
 
         if args.load_path!=None:
-            folder = '/hdd/junxuanl/ML-proj-BPP/Models/StochasticPolicyCNN_task3_online_modified'  # 这里替换成你实际想要查找的文件夹路径
-            result = find_max_numbered_file(folder)
             if not use_cuda:
-                checkpoint = torch.load(result,map_location='cpu')
+                checkpoint = torch.load(args.load_path,map_location='cpu')
             else:
-                checkpoint = torch.load(result)
-                print("load: "+result)
+                checkpoint = torch.load(args.load_path)
+                print("load: "+args.load_path)
     
             self.policy.load_state_dict(checkpoint['model_state_dict'])
             optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
@@ -617,7 +618,7 @@ class BehaviouralCloning():
         random_vol=0
         self.search_space=[]
         dim   = np.zeros((12))
-        print(len(dims))
+        # print(len(dims))
         count=0
         unpack_dims=[]
         
@@ -687,9 +688,9 @@ class BehaviouralCloning():
                                     count+=1
                                     temp_flag=True
                    
-        print(state[0,:20,:20].flatten())
-        print(count)
-        print(tot_vol/(self.ldc_ht*self.ldc_len*self.ldc_wid)*100,packman_vol/(self.ldc_ht*self.ldc_len*self.ldc_wid)*100,walle_vol/(self.ldc_ht*self.ldc_len*self.ldc_wid)*100)
+        # print(state[0,:20,:20].flatten())
+        # print(count)
+        # print(tot_vol/(self.ldc_ht*self.ldc_len*self.ldc_wid)*100,packman_vol/(self.ldc_ht*self.ldc_len*self.ldc_wid)*100,walle_vol/(self.ldc_ht*self.ldc_len*self.ldc_wid)*100)
         self.show(state[0,:,:])
 
 
@@ -814,6 +815,7 @@ class BehaviouralCloning():
 
     def show(self,a):
         plt.imshow(a,cmap='hot',vmin=0,vmax=self.ldc_ht)
+        plt.colorbar()
         plt.savefig(f'Box_data/evaluation_{self.ldc_len}*{self.ldc_wid}*{self.ldc_ht}.jpg')
 
 
@@ -856,7 +858,7 @@ if __name__ == "__main__":
     vol=0
 
     for i,j,k in temp:
-        BC = BehaviouralCloning(args,name="StochasticPolicyCNN_task3_online_modified",ldc_len=i,ldc_wid=j,ldc_ht=k)
+        BC = BehaviouralCloning(args,name="StochasticPolicyCNN_task3",ldc_len=i,ldc_wid=j,ldc_ht=k)
         # BC.train_online()
         boxes,rate=BC.evaluate_on_data(boxes)
         Rate.append(rate)
