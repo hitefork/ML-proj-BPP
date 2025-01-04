@@ -24,7 +24,7 @@ import matplotlib.pyplot as plt
 
 use_cuda = torch.cuda.is_available()
 
-device   = torch.device("cuda:7" if use_cuda else "cpu")
+device   = torch.device("cuda:0" if use_cuda else "cpu")
 
 max_ldc_x  = 1
 max_ldc_y =1
@@ -389,7 +389,7 @@ class BehaviouralCloning():
         state = np.roll(state,axis=0,shift=1)
         state[0,:,:] = ldc
         state[0,x:x+l,y:y+b] += h
-        return state    
+        return state
     
     
     def evaluate(self):
@@ -405,7 +405,7 @@ class BehaviouralCloning():
 
 
         dim   = np.zeros((12))
-        data = self.data_maker.get_data_dict(flatten=False)
+        data = self.data_maker.get_data_dict(train=False,flatten=False)
         dims=[]
 
 
@@ -437,7 +437,7 @@ class BehaviouralCloning():
                 feed_dim     = feed_dim.to(device)
 
             cur_dim = np.array(dims[i][:3]).astype(np.uint16)
-            a,m,s,r,_   = self.policy.sample(feed_state.float(),feed_dim.float())
+            a,m,s,r   = self.policy.sample(feed_state.float(),feed_dim.float())
             x,y,temp_rotation     = self.shift_action(a,r)
             l,b,h = cur_dim
         #     print(score)
@@ -446,12 +446,60 @@ class BehaviouralCloning():
             y = int(y.cpu()[0])
             
             
-
-
-            
             # print(cur_dim)
             # print(x,y,temp_rotation)
             feasible = getFeasibility(state[0],x,y,l,b,h,temp_rotation)
+
+            scale = 1
+            flag = 0
+            rotate = 0
+            while(not feasible and rotate < 6):
+                upperboundx = min(x+scale,100)
+                lowerboundx = max(x-scale,0)
+                upperboundy = min(y+scale,100)
+                lowerboundy = max(y-scale,0)
+
+                x,y = lowerboundx,lowerboundy
+                while(y <= upperboundy and not flag):
+                    #temp_rotation = np.random.randint(3)
+                    feasible = getFeasibility(state[0],x,y,l,b,h,temp_rotation)
+                    if(feasible):
+                        flag = 1
+                        break
+                    y = y+1
+                
+                x,y = upperboundx,lowerboundy
+                while(y <= upperboundy and not flag):
+                    #temp_rotation = np.random.randint(3)
+                    feasible = getFeasibility(state[0],x,y,l,b,h,temp_rotation)
+                    if(feasible):
+                        flag = 1
+                        break
+                    y = y+1
+
+                x,y = lowerboundx+1,lowerboundy
+                while(x < upperboundy and not flag):
+                    #temp_rotation = np.random.randint(3)
+                    feasible = getFeasibility(state[0],x,y,l,b,h,temp_rotation)
+                    if(feasible):
+                        flag = 1
+                        break
+                    x = x+1
+
+                x,y = lowerboundx+1,upperboundy
+                while(x < upperboundy and not flag):
+                    #temp_rotation = np.random.randint(3)
+                    feasible = getFeasibility(state[0],x,y,l,b,h,temp_rotation)
+                    if(feasible):
+                        flag = 1
+                        break
+                    x = x+1
+
+                scale = scale+1
+                if(scale > 80):
+                    scale = 1
+                    temp_rotation = (temp_rotation+1)%6
+                    rotate = rotate+1
             
             if feasible:
                 state = self.step(state,[x,y],cur_dim,temp_rotation)
@@ -464,15 +512,17 @@ class BehaviouralCloning():
 
     def show(self,a):
         plt.imshow(a,cmap='hot',vmin=0,vmax=self.ldc_ht)
-        plt.savefig('Box_data/evaluation.jpg')
+        plt.savefig('evaluation.jpg')
 
 if __name__ == "__main__":
     if not os.path.exists('./Models'):
         os.makedirs('./Models')
     # set seeds
-    # torch.manual_seed(args.seed)
-    # np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
     BC = BehaviouralCloning(args,name="StochasticPolicyCNN_lr1e-2_random_task1")
     BC.train()
+    BC.policy.eval()
+    BC.evaluate()
 
         
