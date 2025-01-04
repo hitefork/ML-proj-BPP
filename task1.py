@@ -15,7 +15,7 @@ from tensorboardX import SummaryWriter
 import os
 from make_data import BoxMaker
 from model import StochasticPolicyCNN,StochasticPolicy
-from config import args
+from config_task1 import args
 from make_data import get_inverse_rotation
 
 import matplotlib.pyplot as plt
@@ -403,8 +403,9 @@ class BehaviouralCloning():
                 print("load: "+args.load_path)
             self.policy.load_state_dict(checkpoint['model_state_dict'])
 
-
+        self.policy.eval()
         dim   = np.zeros((12))
+        self.data_maker=BoxMaker(self.ldc_ht,self.ldc_wid,self.ldc_len)
         data = self.data_maker.get_data_dict(train=False,flatten=False)
         dims=[]
 
@@ -450,56 +451,72 @@ class BehaviouralCloning():
             # print(x,y,temp_rotation)
             feasible = getFeasibility(state[0],x,y,l,b,h,temp_rotation)
 
-            scale = 1
-            flag = 0
-            rotate = 0
-            while(not feasible and rotate < 6):
-                upperboundx = min(x+scale,100)
-                lowerboundx = max(x-scale,0)
-                upperboundy = min(y+scale,100)
-                lowerboundy = max(y-scale,0)
-
-                x,y = lowerboundx,lowerboundy
-                while(y <= upperboundy and not flag):
-                    #temp_rotation = np.random.randint(3)
-                    feasible = getFeasibility(state[0],x,y,l,b,h,temp_rotation)
-                    if(feasible):
-                        flag = 1
-                        break
-                    y = y+1
+            # scale = 1
+            # flag = 0
+            # rotate = 0
+            # while(not feasible and rotate < 6):
+            #     upperboundx = min(x+scale,100)
+            #     lowerboundx = max(x-scale,0)
+            #     upperboundy = min(y+scale,100)
+            #     lowerboundy = max(y-scale,0)
                 
-                x,y = upperboundx,lowerboundy
-                while(y <= upperboundy and not flag):
-                    #temp_rotation = np.random.randint(3)
-                    feasible = getFeasibility(state[0],x,y,l,b,h,temp_rotation)
-                    if(feasible):
-                        flag = 1
-                        break
-                    y = y+1
+            #     if(not feasible):
+            #         x,y = lowerboundx,lowerboundy
+            #         while(y <= upperboundy and not flag):
+            #             #temp_rotation = np.random.randint(3)
+            #             feasible = getFeasibility(state[0],x,y,l,b,h,temp_rotation)
+            #             if(feasible):
+            #                 break
+            #             y = y+1
+                
+            #     if(not feasible):
+            #         x,y = upperboundx,lowerboundy
+            #         while(y <= upperboundy and not flag):
+            #             #temp_rotation = np.random.randint(3)
+            #             feasible = getFeasibility(state[0],x,y,l,b,h,temp_rotation)
+            #             if(feasible):
+            #                 break
+            #             y = y+1
 
-                x,y = lowerboundx+1,lowerboundy
-                while(x < upperboundy and not flag):
-                    #temp_rotation = np.random.randint(3)
-                    feasible = getFeasibility(state[0],x,y,l,b,h,temp_rotation)
-                    if(feasible):
-                        flag = 1
-                        break
-                    x = x+1
+            #     if(not feasible):
+            #         x,y = lowerboundx+1,lowerboundy
+            #         while(x < upperboundy and not flag):
+            #             #temp_rotation = np.random.randint(3)
+            #             feasible = getFeasibility(state[0],x,y,l,b,h,temp_rotation)
+            #             if(feasible):
+            #                 break
+            #             x = x+1
 
-                x,y = lowerboundx+1,upperboundy
-                while(x < upperboundy and not flag):
-                    #temp_rotation = np.random.randint(3)
-                    feasible = getFeasibility(state[0],x,y,l,b,h,temp_rotation)
-                    if(feasible):
-                        flag = 1
-                        break
-                    x = x+1
+            #     if(not feasible):
+            #         x,y = lowerboundx+1,upperboundy
+            #         while(x < upperboundy and not flag):
+            #             #temp_rotation = np.random.randint(3)
+            #             feasible = getFeasibility(state[0],x,y,l,b,h,temp_rotation)
+            #             if(feasible):
+            #                 break
+            #             x = x+1
 
-                scale = scale+1
-                if(scale > 80):
-                    scale = 1
-                    temp_rotation = (temp_rotation+1)%6
-                    rotate = rotate+1
+            #     if(not feasible):
+            #         scale = scale+1
+            #         if(scale > 80):
+            #             scale = 1
+            #             temp_rotation = (temp_rotation+1)%6
+            #             rotate = rotate+1
+
+            j = 0
+            k = 0
+            rotate = 0
+            while(not feasible and j<100):
+                x,y,temp_rotation = j,k,rotate
+                #temp_rotation = np.random.randint(3)
+                feasible = getFeasibility(state[0],x,y,l,b,h,temp_rotation)
+                rotate = rotate+1
+                if(rotate >= 3):
+                    rotate = 0
+                    k = k+1
+                if(k >= 100):
+                    k = 0
+                    j = j+1
             
             if feasible:
                 state = self.step(state,[x,y],cur_dim,temp_rotation)
@@ -512,7 +529,8 @@ class BehaviouralCloning():
 
     def show(self,a):
         plt.imshow(a,cmap='hot',vmin=0,vmax=self.ldc_ht)
-        plt.savefig('evaluation.jpg')
+        plt.colorbar()
+        plt.savefig('task1.jpg')
 
 if __name__ == "__main__":
     if not os.path.exists('./Models'):
@@ -520,9 +538,8 @@ if __name__ == "__main__":
     # set seeds
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
-    BC = BehaviouralCloning(args,name="StochasticPolicyCNN_lr1e-2_random_task1")
-    BC.train()
-    BC.policy.eval()
+    BC = BehaviouralCloning(args,name="StochasticPolicyCNN_task1")
+    # BC.train()
     BC.evaluate()
 
         

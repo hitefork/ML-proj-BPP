@@ -16,7 +16,7 @@ from tensorboardX import SummaryWriter
 import os
 from make_data import BoxMaker
 from model import StochasticPolicyCNN,StochasticPolicy,QNetwork,StochasticPolicyCNN_task3,QNetwork_CNN
-from config import args
+from config_task3 import args
 from make_data import get_inverse_rotation
 # set seeds
 # torch.manual_seed(args.seed)
@@ -806,7 +806,7 @@ class BehaviouralCloning():
                         fail_count+=1
         # print(state[0,:20,:20].flatten())
         # print(count)
-        print(tot_vol/(self.ldc_ht*self.ldc_len*self.ldc_wid)*100,packman_vol/(self.ldc_ht*self.ldc_len*self.ldc_wid)*100,walle_vol/(self.ldc_ht*self.ldc_len*self.ldc_wid)*100)
+        # print(tot_vol/(self.ldc_ht*self.ldc_len*self.ldc_wid)*100,packman_vol/(self.ldc_ht*self.ldc_len*self.ldc_wid)*100,walle_vol/(self.ldc_ht*self.ldc_len*self.ldc_wid)*100)
         self.show(state[0,:,:])
 
 
@@ -814,10 +814,11 @@ class BehaviouralCloning():
 
 
     def show(self,a):
+
         plt.imshow(a,cmap='hot',vmin=0,vmax=self.ldc_ht)
         plt.colorbar()
-        plt.savefig(f'Box_data/evaluation_{self.ldc_len}*{self.ldc_wid}*{self.ldc_ht}.jpg')
-
+        plt.savefig(f'Box_data/task3_{self.ldc_len}*{self.ldc_wid}*{self.ldc_ht}.jpg')
+        plt.close()
 
 def read_csv_file(file_path):
     data = []
@@ -836,8 +837,8 @@ if __name__ == "__main__":
     #     # BC.train_online()
     #     BC.evaluate()
 
-    torch.manual_seed(43)
-    np.random.seed(43)
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
     file_path = '/hdd/junxuanl/ML-proj-BPP/task3.csv'
     csv_data = read_csv_file(file_path)
     boxes=[]
