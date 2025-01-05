@@ -12,11 +12,10 @@ cd ML-proj-BPP
 pip install -r requirements.txt
 ```
 
-# Download
+# Checkpoints
 
-Model Weights are as follows:
+Our trained model checkpoints can be found in [Link](https://jbox.sjtu.edu.cn/l/j1iBwp)
 
-[https://jbox.sjtu.edu.cn/l/j1iBwp](https://jbox.sjtu.edu.cn/l/j1iBwp)
 
 # Task1
 
