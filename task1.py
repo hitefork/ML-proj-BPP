@@ -33,7 +33,7 @@ def getFeasibility(ldc,x,y,l,b,h,r):
     feasible = False
     rotated_shape=get_inverse_rotation(np.array([l,b,h]),r)
     # print(ldc[x:x+rotated_shape[0],y:y+rotated_shape[1]])
-    if len(np.unique(ldc[x:x+rotated_shape[0],y:y+rotated_shape[1]])) == 1 and ldc[x,y]+rotated_shape[2]<=100:
+    if len(np.unique(ldc[x:x+rotated_shape[0],y:y+rotated_shape[1]])) == 1 and np.all(ldc[x:x+rotated_shape[0],y:y+rotated_shape[1]]+rotated_shape[2]<=100):
         feasible=True
     return feasible
 
@@ -415,6 +415,7 @@ class BehaviouralCloning():
             dim[:3] = data[i][1]
             dims.append(dim)
 
+
         tot_vol = 0
         state = np.zeros((4,self.ldc_len,self.ldc_wid))
         walle_vol = 0
@@ -423,7 +424,7 @@ class BehaviouralCloning():
         self.search_space=[]
         for i in range(len(dims)):
             packman = 0
-            cur_dim = np.array(dims[i][:3]).astype(np.uint16)
+            cur_dim = np.array(dims[i][:3]).astype(np.uint32)
 
 
             
@@ -511,26 +512,31 @@ class BehaviouralCloning():
                 #temp_rotation = np.random.randint(3)
                 feasible = getFeasibility(state[0],x,y,l,b,h,temp_rotation)
                 rotate = rotate+1
-                if(rotate >= 3):
+                if(rotate >= 6):
                     rotate = 0
                     k = k+1
                 if(k >= 100):
                     k = 0
                     j = j+1
-            
+
             if feasible:
                 state = self.step(state,[x,y],cur_dim,temp_rotation)
                 tot_vol += cur_dim[0]*cur_dim[1]*cur_dim[2]
                 packman_num+=1
 
 
-        print(tot_vol/(self.ldc_ht*self.ldc_len*self.ldc_wid)*100,packman_num)
+        print(tot_vol/(self.ldc_ht*self.ldc_len*self.ldc_wid)*100)
         self.show(state[0,:,:])
+
+
+
+
 
     def show(self,a):
         plt.imshow(a,cmap='hot',vmin=0,vmax=self.ldc_ht)
         plt.colorbar()
         plt.savefig('Box_data/task1.jpg')
+        
 
 if __name__ == "__main__":
     if not os.path.exists('./Models'):
@@ -541,5 +547,6 @@ if __name__ == "__main__":
     BC = BehaviouralCloning(args,name="StochasticPolicyCNN_task1")
     # BC.train()
     BC.evaluate()
+
 
         

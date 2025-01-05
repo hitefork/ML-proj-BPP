@@ -487,7 +487,7 @@ class BehaviouralCloning():
                             break
         self.policy.eval()
         print(tot_vol/(self.ldc_ht*self.ldc_len*self.ldc_wid)*100)
-        print(f"box_packed:{box_packed},box_nums:{len(dims)}")
+
         self.show(state[0,:,:])
 
     def show(self,a):
